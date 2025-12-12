@@ -308,6 +308,59 @@
 
         .loading.hidden { display: none; }
 
+        /* 猫猫提示 */
+        .cat-hint {
+            position: fixed;
+            bottom: 120px;
+            right: 20px;
+            background: rgba(255, 182, 193, 0.9);
+            color: #c41e3a;
+            padding: 8px 15px;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            z-index: 100;
+            opacity: 0;
+            transform: translateY(10px);
+            transition: all 0.3s ease;
+            pointer-events: none;
+        }
+
+        .cat-hint.show {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        /* 喵叫气泡 */
+        .meow-bubble {
+            position: fixed;
+            background: white;
+            padding: 10px 18px;
+            border-radius: 20px;
+            font-size: 1.2rem;
+            z-index: 1001;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.3);
+            animation: meowBubble 1.5s ease-out forwards;
+            pointer-events: none;
+        }
+
+        .meow-bubble::after {
+            content: '';
+            position: absolute;
+            bottom: -8px;
+            left: 20px;
+            border-left: 10px solid transparent;
+            border-right: 10px solid transparent;
+            border-top: 10px solid white;
+        }
+
+        @keyframes meowBubble {
+            0% { opacity: 0; transform: scale(0.5) translateY(20px); }
+            20% { opacity: 1; transform: scale(1.1) translateY(0); }
+            30% { transform: scale(1) translateY(0); }
+            80% { opacity: 1; }
+            100% { opacity: 0; transform: translateY(-30px); }
+        }
+
         @media (max-width: 768px) {
             .theme-selector {
                 right: 10px;
@@ -322,6 +375,10 @@
             .ambient-light {
                 filter: blur(60px);
                 opacity: 0.3;
+            }
+            .cat-hint {
+                right: 10px;
+                bottom: 150px;
             }
         }
     </style>
@@ -342,12 +399,15 @@
     <div class="countdown" id="countdown"></div>
     <div id="canvas-container"></div>
 
+    <div class="cat-hint" id="catHint">🐱 点击猫猫"鸣人"试试～</div>
+
     <div class="controls">
         <button class="control-btn" id="musicBtn" onclick="toggleMusic()">🎵 音乐</button>
         <button class="control-btn" id="snowBtn" onclick="toggleSnow()">❄️ 雪花</button>
         <button class="control-btn" id="auroraBtn" onclick="toggleAurora()">🌌 极光</button>
         <button class="control-btn" id="autoRotateBtn" onclick="toggleAutoRotate()">🔄 旋转</button>
         <button class="control-btn" id="ambientBtn" onclick="toggleAmbient()">💡 氛围灯</button>
+        <button class="control-btn" id="glowBandBtn" onclick="toggleGlowBand()">✨ 光带</button>
         <button class="control-btn" onclick="launchFireworks()">🎆 烟花</button>
     </div>
 
@@ -380,12 +440,12 @@
             'photos/1.jpg',
             'photos/2.jpg',
             'photos/3.jpg',
+            'photos/4.jpg',
             'photos/5.jpg',
             'photos/6.jpg',
             'photos/7.jpg',
             'photos/8.png',
             'photos/9.jpg',
-            'photos/10.jpg',
         ];
         // =====================================================
 
@@ -402,8 +462,55 @@
         let isAuroraEnabled = true;
         let isAutoRotate = true;
         let isAmbientEnabled = true;
+        let isGlowBandEnabled = true;
         let isMusicPlaying = false;
         let currentTheme = 'classic';
+
+        // 猫猫动画状态
+        let catAnimationState = {
+            isBlinking: false,
+            isShaking: false,
+            blinkProgress: 0,
+            shakeProgress: 0,
+            leftEyeScale: 1,
+            rightEyeScale: 1,
+            headRotation: 0
+        };
+        let catEyes = { left: null, right: null, leftPupil: null, rightPupil: null };
+        let catHead = null;
+
+        // 树上光带
+        let glowBands = [];
+
+        // 喵叫音效 (使用Web Audio API生成)
+        let audioContext = null;
+
+        function createMeowSound() {
+            if (!audioContext) {
+                audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            }
+            
+            const now = audioContext.currentTime;
+            const oscillator = audioContext.createOscillator();
+            const gainNode = audioContext.createGain();
+            
+            oscillator.connect(gainNode);
+            gainNode.connect(audioContext.destination);
+            
+            // 模拟喵叫声
+            oscillator.type = 'sine';
+            oscillator.frequency.setValueAtTime(700, now);
+            oscillator.frequency.exponentialRampToValueAtTime(400, now + 0.15);
+            oscillator.frequency.exponentialRampToValueAtTime(600, now + 0.3);
+            oscillator.frequency.exponentialRampToValueAtTime(300, now + 0.5);
+            
+            gainNode.gain.setValueAtTime(0.3, now);
+            gainNode.gain.exponentialRampToValueAtTime(0.4, now + 0.1);
+            gainNode.gain.exponentialRampToValueAtTime(0.01, now + 0.5);
+            
+            oscillator.start(now);
+            oscillator.stop(now + 0.5);
+        }
 
         // 倒计时
         function updateCountdown() {
@@ -475,14 +582,15 @@
             createMoon();
             createAurora();
             createLayeredTree();
+            createTreeGlowBands();  // 新增：树上柔光光带
             createTreeDecorations();
-            createChanelLogo();  // 改进的香奈儿LOGO
+            createChanelLogo();
             createSnow();
             createStarField();
             createGroundGlow();
             createDetailedGifts();
             createSnowman();
-            createCat();  // 新增：创建猫猫"鸣人"
+            createCat();
             createCandyCanes();
             createFireflies();
             createSleigh();
@@ -490,6 +598,13 @@
 
             setTimeout(() => {
                 document.getElementById('loading').classList.add('hidden');
+                // 显示猫猫提示
+                setTimeout(() => {
+                    document.getElementById('catHint').classList.add('show');
+                    setTimeout(() => {
+                        document.getElementById('catHint').classList.remove('show');
+                    }, 5000);
+                }, 1500);
             }, 2000);
 
             setupEventListeners();
@@ -499,6 +614,159 @@
             document.getElementById('auroraBtn').classList.add('active');
             document.getElementById('autoRotateBtn').classList.add('active');
             document.getElementById('ambientBtn').classList.add('active');
+            document.getElementById('glowBandBtn').classList.add('active');
+        }
+
+        // 创建树上柔光光带 - 像圣诞店橱窗那种氛围
+        function createTreeGlowBands() {
+            const bandColors = [
+                { color: 0xff6b6b, opacity: 0.4 },  // 红色
+                { color: 0xffd700, opacity: 0.5 },  // 金色
+                { color: 0x7bed9f, opacity: 0.4 },  // 绿色
+                { color: 0x70a1ff, opacity: 0.4 },  // 蓝色
+                { color: 0xff9ff3, opacity: 0.4 },  // 粉色
+            ];
+
+            // 创建多圈光带环绕树
+            const bandHeights = [2.5, 4.5, 6.5, 8.5, 10.5, 12];
+            const bandRadii = [5.0, 4.3, 3.6, 2.9, 2.2, 1.5];
+
+            bandHeights.forEach((height, index) => {
+                const bandGroup = new THREE.Group();
+                const colorData = bandColors[index % bandColors.length];
+                const radius = bandRadii[index];
+
+                // 主光带 - 使用粒子形成柔和的光环
+                const particleCount = 300;
+                const positions = new Float32Array(particleCount * 3);
+                const colors = new Float32Array(particleCount * 3);
+                const sizes = new Float32Array(particleCount);
+
+                const baseColor = new THREE.Color(colorData.color);
+
+                for (let i = 0; i < particleCount; i++) {
+                    const angle = (i / particleCount) * Math.PI * 2;
+                    const radiusVariation = radius + (Math.random() - 0.5) * 0.3;
+                    const heightVariation = (Math.random() - 0.5) * 0.4;
+
+                    positions[i * 3] = Math.cos(angle) * radiusVariation;
+                    positions[i * 3 + 1] = height + heightVariation;
+                    positions[i * 3 + 2] = Math.sin(angle) * radiusVariation;
+
+                    // 颜色变化
+                    const brightness = 0.8 + Math.random() * 0.4;
+                    colors[i * 3] = baseColor.r * brightness;
+                    colors[i * 3 + 1] = baseColor.g * brightness;
+                    colors[i * 3 + 2] = baseColor.b * brightness;
+
+                    sizes[i] = 0.3 + Math.random() * 0.2;
+                }
+
+                const geometry = new THREE.BufferGeometry();
+                geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+                geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+                geometry.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
+
+                const material = new THREE.PointsMaterial({
+                    size: 0.35,
+                    vertexColors: true,
+                    transparent: true,
+                    opacity: colorData.opacity,
+                    blending: THREE.AdditiveBlending,
+                    depthWrite: false
+                });
+
+                const particles = new THREE.Points(geometry, material);
+                particles.userData.originalPositions = positions.slice();
+                particles.userData.baseHeight = height;
+                particles.userData.baseRadius = radius;
+                particles.userData.colorData = colorData;
+                bandGroup.add(particles);
+
+                // 外层发光光晕 - 使用更大的透明粒子
+                const glowCount = 60;
+                const glowPositions = new Float32Array(glowCount * 3);
+                const glowColors = new Float32Array(glowCount * 3);
+
+                for (let i = 0; i < glowCount; i++) {
+                    const angle = (i / glowCount) * Math.PI * 2;
+                    glowPositions[i * 3] = Math.cos(angle) * radius;
+                    glowPositions[i * 3 + 1] = height;
+                    glowPositions[i * 3 + 2] = Math.sin(angle) * radius;
+
+                    glowColors[i * 3] = baseColor.r;
+                    glowColors[i * 3 + 1] = baseColor.g;
+                    glowColors[i * 3 + 2] = baseColor.b;
+                }
+
+                const glowGeometry = new THREE.BufferGeometry();
+                glowGeometry.setAttribute('position', new THREE.BufferAttribute(glowPositions, 3));
+                glowGeometry.setAttribute('color', new THREE.BufferAttribute(glowColors, 3));
+
+                const glowMaterial = new THREE.PointsMaterial({
+                    size: 1.2,
+                    vertexColors: true,
+                    transparent: true,
+                    opacity: 0.15,
+                    blending: THREE.AdditiveBlending,
+                    depthWrite: false
+                });
+
+                const glow = new THREE.Points(glowGeometry, glowMaterial);
+                glow.userData.isGlow = true;
+                bandGroup.add(glow);
+
+                glowBands.push(bandGroup);
+                treeGroup.add(bandGroup);
+            });
+
+            // 添加垂直流动的光柱效果
+            const lightStreamCount = 8;
+            for (let i = 0; i < lightStreamCount; i++) {
+                const streamGroup = new THREE.Group();
+                const angle = (i / lightStreamCount) * Math.PI * 2;
+                
+                const streamParticleCount = 50;
+                const streamPositions = new Float32Array(streamParticleCount * 3);
+                const streamColors = new Float32Array(streamParticleCount * 3);
+
+                const streamColor = new THREE.Color(bandColors[i % bandColors.length].color);
+
+                for (let j = 0; j < streamParticleCount; j++) {
+                    const height = 2 + (j / streamParticleCount) * 11;
+                    const radiusAtHeight = 5 - (height - 2) * 0.35;
+                    
+                    streamPositions[j * 3] = Math.cos(angle) * radiusAtHeight;
+                    streamPositions[j * 3 + 1] = height;
+                    streamPositions[j * 3 + 2] = Math.sin(angle) * radiusAtHeight;
+
+                    streamColors[j * 3] = streamColor.r;
+                    streamColors[j * 3 + 1] = streamColor.g;
+                    streamColors[j * 3 + 2] = streamColor.b;
+                }
+
+                const streamGeometry = new THREE.BufferGeometry();
+                streamGeometry.setAttribute('position', new THREE.BufferAttribute(streamPositions, 3));
+                streamGeometry.setAttribute('color', new THREE.BufferAttribute(streamColors, 3));
+
+                const streamMaterial = new THREE.PointsMaterial({
+                    size: 0.2,
+                    vertexColors: true,
+                    transparent: true,
+                    opacity: 0.3,
+                    blending: THREE.AdditiveBlending,
+                    depthWrite: false
+                });
+
+                const stream = new THREE.Points(streamGeometry, streamMaterial);
+                stream.userData.type = 'lightStream';
+                stream.userData.angle = angle;
+                stream.userData.originalPositions = streamPositions.slice();
+                streamGroup.add(stream);
+                
+                glowBands.push(streamGroup);
+                treeGroup.add(streamGroup);
+            }
         }
 
         // 创建月亮
@@ -567,18 +835,16 @@
 
         // 创建分层圣诞树
         function createLayeredTree() {
-            // 树的层级配置 - 更自然的深绿色渐变
             const layers = [
-                { y: 1.5, radius: 4.5, height: 3.5, color: 0x0d3d1a },   // 底层 - 最深
-                { y: 4.0, radius: 3.8, height: 3.2, color: 0x145a26 },   // 第二层
-                { y: 6.2, radius: 3.0, height: 2.8, color: 0x1a6b30 },   // 第三层
-                { y: 8.2, radius: 2.2, height: 2.4, color: 0x1f7a3a },   // 第四层
-                { y: 9.8, radius: 1.5, height: 2.0, color: 0x228b44 },   // 第五层
-                { y: 11.2, radius: 0.8, height: 1.6, color: 0x2a9d50 },  // 顶层 - 最亮
+                { y: 1.5, radius: 4.5, height: 3.5, color: 0x0d3d1a },
+                { y: 4.0, radius: 3.8, height: 3.2, color: 0x145a26 },
+                { y: 6.2, radius: 3.0, height: 2.8, color: 0x1a6b30 },
+                { y: 8.2, radius: 2.2, height: 2.4, color: 0x1f7a3a },
+                { y: 9.8, radius: 1.5, height: 2.0, color: 0x228b44 },
+                { y: 11.2, radius: 0.8, height: 1.6, color: 0x2a9d50 },
             ];
 
             layers.forEach((layer, index) => {
-                // 每层用粒子构成
                 const particleCount = 5000 - index * 600;
                 const positions = new Float32Array(particleCount * 3);
                 const colors = new Float32Array(particleCount * 3);
@@ -597,7 +863,6 @@
                     positions[i * 3 + 1] = layer.y + y;
                     positions[i * 3 + 2] = Math.sin(angle) * radius + noise;
 
-                    // 颜色变化 - 添加自然的深浅变化
                     const variation = 0.8 + Math.random() * 0.4;
                     colors[i * 3] = baseColor.r * variation;
                     colors[i * 3 + 1] = baseColor.g * variation;
@@ -623,7 +888,7 @@
                 treeGroup.add(layerMesh);
             });
 
-            // 添加雪覆盖效果在每层边缘
+            // 雪覆盖效果
             layers.forEach((layer, index) => {
                 const snowCount = 800 - index * 100;
                 const positions = new Float32Array(snowCount * 3);
@@ -756,7 +1021,7 @@
             }
         }
 
-        // 创建香奈儿Logo - 改进版，更大更明显
+        // 创建香奈儿Logo
         function createChanelLogo() {
             chanelLogo = new THREE.Group();
 
@@ -766,14 +1031,12 @@
                 opacity: 0.95
             });
 
-            // 创建两个相交的C - 更大更清晰
             const createC = (flip) => {
                 const cGroup = new THREE.Group();
                 const segments = 24;
-                const radius = 0.6;  // 增大半径
-                const thickness = 0.1;  // 增加厚度
+                const radius = 0.6;
+                const thickness = 0.1;
 
-                // C形状用多个小圆柱拼接
                 for (let i = 0; i < segments; i++) {
                     const angle = (i / segments) * Math.PI * 1.3 - Math.PI * 0.15;
                     const nextAngle = ((i + 1) / segments) * Math.PI * 1.3 - Math.PI * 0.15;
@@ -794,7 +1057,6 @@
                     cGroup.add(segment);
                 }
 
-                // 添加端点球
                 const endPoints = [
                     { angle: -Math.PI * 0.15 },
                     { angle: Math.PI * 1.15 }
@@ -827,7 +1089,6 @@
             c2.position.x = 0.22;
             chanelLogo.add(c2);
 
-            // 添加发光效果
             const glowGeometry = new THREE.SphereGeometry(1.2, 16, 16);
             const glowMaterial = new THREE.MeshBasicMaterial({
                 color: 0xd4af37,
@@ -837,7 +1098,6 @@
             });
             chanelLogo.add(new THREE.Mesh(glowGeometry, glowMaterial));
 
-            // 添加外圈光环
             const ringGeometry = new THREE.TorusGeometry(1.0, 0.03, 8, 32);
             const ringMaterial = new THREE.MeshBasicMaterial({
                 color: 0xffd700,
@@ -848,46 +1108,28 @@
             ring.rotation.x = Math.PI / 2;
             chanelLogo.add(ring);
 
-            // 添加星星装饰
-            const starPoints = [];
-            for (let i = 0; i < 5; i++) {
-                const angle = (i / 5) * Math.PI * 2 - Math.PI / 2;
-                starPoints.push(new THREE.Vector3(
-                    Math.cos(angle) * 1.3,
-                    Math.sin(angle) * 1.3,
-                    0
-                ));
-                const innerAngle = angle + Math.PI / 5;
-                starPoints.push(new THREE.Vector3(
-                    Math.cos(innerAngle) * 0.5,
-                    Math.sin(innerAngle) * 0.5,
-                    0
-                ));
-            }
-
             chanelLogo.position.set(0, 13.8, 0);
             chanelLogo.rotation.x = -0.1;
             treeGroup.add(chanelLogo);
         }
 
-        // 创建猫猫"鸣人"
+        // 创建猫猫"鸣人" - 增强版，支持交互动画
         function createCat() {
             cat = new THREE.Group();
             
-            // 灰白色材质
             const grayWhiteMat = new THREE.MeshPhongMaterial({ 
-                color: 0xd0d0d8,  // 灰白色
+                color: 0xd0d0d8,
                 shininess: 20 
             });
             const darkGrayMat = new THREE.MeshPhongMaterial({ 
-                color: 0x808090,  // 深灰色斑纹
+                color: 0x808090,
                 shininess: 15 
             });
             const pinkMat = new THREE.MeshBasicMaterial({ color: 0xffb6c1 });
             const blackMat = new THREE.MeshBasicMaterial({ color: 0x111111 });
             const whiteMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
 
-            // 身体 - 圆润的猫身
+            // 身体
             const body = new THREE.Mesh(
                 new THREE.SphereGeometry(0.7, 20, 20),
                 grayWhiteMat
@@ -896,7 +1138,7 @@
             body.position.y = 0.6;
             cat.add(body);
 
-            // 身体上的灰色斑纹
+            // 斑纹
             const stripe1 = new THREE.Mesh(
                 new THREE.SphereGeometry(0.25, 12, 12),
                 darkGrayMat
@@ -911,20 +1153,20 @@
             stripe2.position.set(-0.25, 0.7, 0.35);
             cat.add(stripe2);
 
-            // 头部
-            const head = new THREE.Mesh(
+            // 头部 - 保存引用用于摇头动画
+            catHead = new THREE.Group();
+            
+            const headMesh = new THREE.Mesh(
                 new THREE.SphereGeometry(0.5, 20, 20),
                 grayWhiteMat
             );
-            head.position.set(0, 1.4, 0.3);
-            head.scale.set(1, 0.9, 0.85);
-            cat.add(head);
+            headMesh.scale.set(1, 0.9, 0.85);
+            catHead.add(headMesh);
 
-            // 耳朵 - 三角形猫耳
+            // 耳朵
             [-0.25, 0.25].forEach((x, i) => {
                 const earGroup = new THREE.Group();
                 
-                // 外耳
                 const ear = new THREE.Mesh(
                     new THREE.ConeGeometry(0.15, 0.3, 4),
                     grayWhiteMat
@@ -932,7 +1174,6 @@
                 ear.rotation.z = x > 0 ? -0.2 : 0.2;
                 earGroup.add(ear);
 
-                // 内耳（粉色）
                 const innerEar = new THREE.Mesh(
                     new THREE.ConeGeometry(0.08, 0.2, 4),
                     pinkMat
@@ -941,52 +1182,77 @@
                 innerEar.rotation.z = x > 0 ? -0.2 : 0.2;
                 earGroup.add(innerEar);
 
-                earGroup.position.set(x, 1.85, 0.25);
-                cat.add(earGroup);
+                earGroup.position.set(x, 0.45, -0.05);
+                catHead.add(earGroup);
             });
 
-            // 眼睛 - 大眼睛
-            [-0.15, 0.15].forEach(x => {
+            // 眼睛 - 保存引用用于眨眼动画
+            const eyeGroup = new THREE.Group();
+            
+            [-0.15, 0.15].forEach((x, index) => {
                 // 眼白
                 const eyeWhite = new THREE.Mesh(
                     new THREE.SphereGeometry(0.1, 12, 12),
                     whiteMat
                 );
-                eyeWhite.position.set(x, 1.45, 0.7);
-                cat.add(eyeWhite);
+                eyeWhite.position.set(x, 0.05, 0.4);
+                eyeGroup.add(eyeWhite);
 
-                // 瞳孔 - 绿色
+                // 瞳孔
                 const pupil = new THREE.Mesh(
                     new THREE.SphereGeometry(0.06, 10, 10),
                     new THREE.MeshBasicMaterial({ color: 0x4a9e4a })
                 );
-                pupil.position.set(x, 1.45, 0.78);
-                cat.add(pupil);
+                pupil.position.set(x, 0.05, 0.48);
+                eyeGroup.add(pupil);
 
                 // 高光
                 const highlight = new THREE.Mesh(
                     new THREE.SphereGeometry(0.02, 6, 6),
                     whiteMat
                 );
-                highlight.position.set(x + 0.02, 1.47, 0.83);
-                cat.add(highlight);
+                highlight.position.set(x + 0.02, 0.07, 0.53);
+                eyeGroup.add(highlight);
+
+                // 眼皮（用于眨眼效果）
+                const eyelid = new THREE.Mesh(
+                    new THREE.SphereGeometry(0.11, 12, 6, 0, Math.PI * 2, 0, Math.PI / 2),
+                    grayWhiteMat
+                );
+                eyelid.position.set(x, 0.05, 0.4);
+                eyelid.rotation.x = Math.PI;
+                eyelid.scale.y = 0; // 初始隐藏
+                eyelid.userData.isEyelid = true;
+                eyeGroup.add(eyelid);
+
+                if (index === 0) {
+                    catEyes.left = eyeWhite;
+                    catEyes.leftPupil = pupil;
+                    catEyes.leftEyelid = eyelid;
+                } else {
+                    catEyes.right = eyeWhite;
+                    catEyes.rightPupil = pupil;
+                    catEyes.rightEyelid = eyelid;
+                }
             });
+
+            catHead.add(eyeGroup);
 
             // 鼻子
             const nose = new THREE.Mesh(
                 new THREE.SphereGeometry(0.04, 8, 8),
                 pinkMat
             );
-            nose.position.set(0, 1.35, 0.8);
-            cat.add(nose);
+            nose.position.set(0, -0.05, 0.5);
+            catHead.add(nose);
 
             // 嘴巴
             const mouthLine = new THREE.Mesh(
                 new THREE.CylinderGeometry(0.008, 0.008, 0.08, 6),
                 blackMat
             );
-            mouthLine.position.set(0, 1.28, 0.78);
-            cat.add(mouthLine);
+            mouthLine.position.set(0, -0.12, 0.48);
+            catHead.add(mouthLine);
 
             // 胡须
             [-1, 1].forEach(side => {
@@ -995,12 +1261,15 @@
                         new THREE.CylinderGeometry(0.005, 0.005, 0.25, 4),
                         darkGrayMat
                     );
-                    whisker.position.set(side * 0.2, 1.32 + i * 0.04, 0.75);
+                    whisker.position.set(side * 0.2, -0.08 + i * 0.04, 0.45);
                     whisker.rotation.z = Math.PI / 2 + side * (0.1 + i * 0.1);
                     whisker.rotation.y = side * 0.2;
-                    cat.add(whisker);
+                    catHead.add(whisker);
                 }
             });
+
+            catHead.position.set(0, 1.4, 0.3);
+            cat.add(catHead);
 
             // 前腿
             [-0.25, 0.25].forEach(x => {
@@ -1011,7 +1280,6 @@
                 leg.position.set(x, 0.2, 0.35);
                 cat.add(leg);
 
-                // 爪子
                 const paw = new THREE.Mesh(
                     new THREE.SphereGeometry(0.1, 10, 10),
                     grayWhiteMat
@@ -1021,7 +1289,7 @@
                 cat.add(paw);
             });
 
-            // 后腿（蹲坐姿势）
+            // 后腿
             [-0.35, 0.35].forEach(x => {
                 const hindLeg = new THREE.Mesh(
                     new THREE.SphereGeometry(0.18, 12, 12),
@@ -1032,8 +1300,9 @@
                 cat.add(hindLeg);
             });
 
-            // 尾巴 - 卷曲的
+            // 尾巴
             const tailGroup = new THREE.Group();
+            tailGroup.userData.isTail = true;
             for (let i = 0; i < 8; i++) {
                 const tailSegment = new THREE.Mesh(
                     new THREE.SphereGeometry(0.08 - i * 0.006, 8, 8),
@@ -1066,10 +1335,13 @@
             bell.position.set(0, 1.0, 0.55);
             cat.add(bell);
 
-            // 名字标签 "鸣人"
+            // 名字标签
             createCatNameTag(cat);
 
-            // 位置和旋转
+            // 添加可点击标记
+            cat.userData.isClickable = true;
+            cat.userData.isCat = true;
+
             cat.position.set(7, 0, 5);
             cat.rotation.y = -0.5;
             scene.add(cat);
@@ -1077,30 +1349,25 @@
 
         // 创建猫猫名字标签
         function createCatNameTag(catGroup) {
-            // 创建一个Canvas来绘制文字
             const canvas = document.createElement('canvas');
             canvas.width = 256;
             canvas.height = 128;
             const ctx = canvas.getContext('2d');
 
-            // 背景 - 心形标签效果
             ctx.fillStyle = '#ff6b6b';
             ctx.beginPath();
             ctx.arc(128, 70, 50, 0, Math.PI * 2);
             ctx.fill();
 
-            // 文字
             ctx.fillStyle = '#ffffff';
             ctx.font = 'bold 36px "Microsoft YaHei", sans-serif';
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
             ctx.fillText('鸣人', 128, 70);
 
-            // 创建纹理
             const texture = new THREE.CanvasTexture(canvas);
             texture.needsUpdate = true;
 
-            // 创建标签平面
             const tagGeometry = new THREE.PlaneGeometry(0.6, 0.3);
             const tagMaterial = new THREE.MeshBasicMaterial({
                 map: texture,
@@ -1113,15 +1380,12 @@
             tag.rotation.x = -0.2;
             catGroup.add(tag);
 
-            // 身体上的名字装饰
             const bodyTagCanvas = document.createElement('canvas');
             bodyTagCanvas.width = 256;
             bodyTagCanvas.height = 128;
             const bodyCtx = bodyTagCanvas.getContext('2d');
 
-            // 爱心背景
             bodyCtx.fillStyle = 'rgba(255, 182, 193, 0.9)';
-            // 画一个爱心
             bodyCtx.beginPath();
             bodyCtx.moveTo(128, 30);
             bodyCtx.bezierCurveTo(128, 20, 100, 10, 80, 40);
@@ -1130,7 +1394,6 @@
             bodyCtx.bezierCurveTo(156, 10, 128, 20, 128, 30);
             bodyCtx.fill();
 
-            // 名字
             bodyCtx.fillStyle = '#c41e3a';
             bodyCtx.font = 'bold 28px "Microsoft YaHei", sans-serif';
             bodyCtx.textAlign = 'center';
@@ -1149,6 +1412,128 @@
             );
             bodyTag.position.set(0, 0.65, 0.58);
             catGroup.add(bodyTag);
+        }
+
+        // 猫猫交互动画
+        function triggerCatAnimation() {
+            if (catAnimationState.isBlinking || catAnimationState.isShaking) return;
+
+            // 播放喵叫声
+            createMeowSound();
+
+            // 显示喵叫气泡
+            showMeowBubble();
+
+            // 触发眨眼
+            catAnimationState.isBlinking = true;
+            catAnimationState.blinkProgress = 0;
+
+            // 触发摇头
+            setTimeout(() => {
+                catAnimationState.isShaking = true;
+                catAnimationState.shakeProgress = 0;
+            }, 200);
+
+            // 触发烟花
+            setTimeout(() => {
+                launchCatFireworks();
+            }, 400);
+        }
+
+        // 显示喵叫气泡
+        function showMeowBubble() {
+            const bubble = document.createElement('div');
+            bubble.className = 'meow-bubble';
+            
+            const meows = ['喵～', '喵喵！', '喵呜～', 'Meow!', '🐱💕'];
+            bubble.textContent = meows[Math.floor(Math.random() * meows.length)];
+            
+            // 计算猫猫在屏幕上的位置
+            const catWorldPos = new THREE.Vector3();
+            cat.getWorldPosition(catWorldPos);
+            catWorldPos.y += 2.5;
+            
+            const screenPos = catWorldPos.project(camera);
+            const x = (screenPos.x * 0.5 + 0.5) * window.innerWidth;
+            const y = (-screenPos.y * 0.5 + 0.5) * window.innerHeight;
+            
+            bubble.style.left = x + 'px';
+            bubble.style.top = (y - 50) + 'px';
+            
+            document.body.appendChild(bubble);
+            
+            setTimeout(() => bubble.remove(), 1500);
+        }
+
+        // 猫猫专属烟花
+        function launchCatFireworks() {
+            // 在猫猫头顶上方发射多个小烟花
+            const catPos = new THREE.Vector3();
+            cat.getWorldPosition(catPos);
+
+            for (let i = 0; i < 3; i++) {
+                setTimeout(() => {
+                    createFirework(
+                        catPos.x + (Math.random() - 0.5) * 4,
+                        catPos.y + 8 + Math.random() * 5,
+                        catPos.z + (Math.random() - 0.5) * 4
+                    );
+                }, i * 150);
+            }
+        }
+
+        // 更新猫猫动画
+        function updateCatAnimation(time) {
+            if (!cat || !catHead) return;
+
+            // 眨眼动画
+            if (catAnimationState.isBlinking) {
+                catAnimationState.blinkProgress += 0.15;
+                
+                if (catAnimationState.blinkProgress <= 1) {
+                    // 闭眼阶段
+                    const scale = 1 - catAnimationState.blinkProgress;
+                    if (catEyes.leftEyelid) catEyes.leftEyelid.scale.y = catAnimationState.blinkProgress;
+                    if (catEyes.rightEyelid) catEyes.rightEyelid.scale.y = catAnimationState.blinkProgress;
+                } else if (catAnimationState.blinkProgress <= 2) {
+                    // 睁眼阶段
+                    const scale = catAnimationState.blinkProgress - 1;
+                    if (catEyes.leftEyelid) catEyes.leftEyelid.scale.y = 1 - scale;
+                    if (catEyes.rightEyelid) catEyes.rightEyelid.scale.y = 1 - scale;
+                } else {
+                    // 动画结束
+                    catAnimationState.isBlinking = false;
+                    if (catEyes.leftEyelid) catEyes.leftEyelid.scale.y = 0;
+                    if (catEyes.rightEyelid) catEyes.rightEyelid.scale.y = 0;
+                }
+            }
+
+            // 摇头动画
+            if (catAnimationState.isShaking) {
+                catAnimationState.shakeProgress += 0.1;
+                
+                if (catAnimationState.shakeProgress <= Math.PI * 3) {
+                    catHead.rotation.y = Math.sin(catAnimationState.shakeProgress * 3) * 0.3;
+                    catHead.rotation.z = Math.sin(catAnimationState.shakeProgress * 2) * 0.1;
+                } else {
+                    catAnimationState.isShaking = false;
+                    catHead.rotation.y = 0;
+                    catHead.rotation.z = 0;
+                }
+            }
+
+            // 常规动画 - 轻微摇晃
+            if (!catAnimationState.isShaking) {
+                cat.rotation.z = Math.sin(time * 1.5) * 0.03;
+            }
+
+            // 尾巴摇动
+            cat.children.forEach(child => {
+                if (child.userData && child.userData.isTail) {
+                    child.rotation.x = Math.sin(time * 3) * 0.15;
+                    child.rotation.z = Math.sin(time * 2) * 0.1;
+                }
+            });
         }
 
         // 创建雪花
@@ -1260,7 +1645,6 @@
             ground.rotation.x = -Math.PI / 2;
             scene.add(ground);
 
-            // 雪地效果
             const snowGround = new THREE.Mesh(
                 new THREE.CircleGeometry(12, 64),
                 new THREE.MeshBasicMaterial({
@@ -1287,7 +1671,6 @@
             giftData.forEach((gift) => {
                 const giftGroup = new THREE.Group();
 
-                // 盒子主体 - 使用更好的材质
                 const boxMaterial = new THREE.MeshPhongMaterial({ 
                     color: gift.boxColor,
                     shininess: 30,
@@ -1301,7 +1684,6 @@
                 box.position.y = gift.size / 2;
                 giftGroup.add(box);
 
-                // 盒盖（略微凸起）
                 const lid = new THREE.Mesh(
                     new THREE.BoxGeometry(gift.size + 0.05, 0.08, gift.size + 0.05),
                     boxMaterial
@@ -1312,7 +1694,6 @@
                 const ribbonMat = new THREE.MeshBasicMaterial({ color: gift.ribbonColor });
                 const ribbonWidth = gift.size * 0.12;
 
-                // 横向丝带
                 const ribbon1 = new THREE.Mesh(
                     new THREE.BoxGeometry(gift.size + 0.1, ribbonWidth, gift.size + 0.1),
                     ribbonMat
@@ -1320,7 +1701,6 @@
                 ribbon1.position.y = gift.size / 2;
                 giftGroup.add(ribbon1);
 
-                // 纵向丝带
                 const ribbon2 = new THREE.Mesh(
                     new THREE.BoxGeometry(ribbonWidth, gift.size + 0.15, gift.size + 0.1),
                     ribbonMat
@@ -1328,10 +1708,8 @@
                 ribbon2.position.y = gift.size / 2;
                 giftGroup.add(ribbon2);
 
-                // 精致蝴蝶结
                 const bowGroup = new THREE.Group();
 
-                // 蝴蝶结环
                 for (let i = 0; i < 2; i++) {
                     const loop = new THREE.Mesh(
                         new THREE.TorusGeometry(gift.size * 0.15, gift.size * 0.04, 8, 16, Math.PI),
@@ -1344,14 +1722,12 @@
                     bowGroup.add(loop);
                 }
 
-                // 蝴蝶结中心
                 const bowCenter = new THREE.Mesh(
                     new THREE.SphereGeometry(gift.size * 0.08, 8, 8),
                     ribbonMat
                 );
                 bowGroup.add(bowCenter);
 
-                // 蝴蝶结尾巴
                 for (let i = 0; i < 2; i++) {
                     const tail = new THREE.Mesh(
                         new THREE.BoxGeometry(gift.size * 0.08, gift.size * 0.25, gift.size * 0.02),
@@ -1381,7 +1757,6 @@
             const blackMat = new THREE.MeshBasicMaterial({ color: 0x111111 });
             const orangeMat = new THREE.MeshBasicMaterial({ color: 0xff6600 });
 
-            // 身体
             const body = new THREE.Mesh(new THREE.SphereGeometry(0.8, 20, 20), whiteMat);
             body.position.y = 0.8;
             snowmanGroup.add(body);
@@ -1394,20 +1769,17 @@
             head.position.y = 2.7;
             snowmanGroup.add(head);
 
-            // 眼睛
             [-0.15, 0.15].forEach(x => {
                 const eye = new THREE.Mesh(new THREE.SphereGeometry(0.06, 8, 8), blackMat);
                 eye.position.set(x, 2.8, 0.4);
                 snowmanGroup.add(eye);
             });
 
-            // 鼻子
             const nose = new THREE.Mesh(new THREE.ConeGeometry(0.06, 0.25, 8), orangeMat);
             nose.position.set(0, 2.68, 0.5);
             nose.rotation.x = Math.PI / 2;
             snowmanGroup.add(nose);
 
-            // 微笑
             for (let i = 0; i < 5; i++) {
                 const dot = new THREE.Mesh(new THREE.SphereGeometry(0.03, 6, 6), blackMat);
                 const angle = (i - 2) * 0.15;
@@ -1415,7 +1787,6 @@
                 snowmanGroup.add(dot);
             }
 
-            // 帽子
             const hatBrim = new THREE.Mesh(
                 new THREE.CylinderGeometry(0.55, 0.55, 0.06, 20),
                 blackMat
@@ -1430,7 +1801,6 @@
             hatTop.position.y = 3.35;
             snowmanGroup.add(hatTop);
 
-            // 帽子装饰带
             const hatBand = new THREE.Mesh(
                 new THREE.CylinderGeometry(0.41, 0.41, 0.1, 20),
                 new THREE.MeshBasicMaterial({ color: 0xff0000 })
@@ -1438,7 +1808,6 @@
             hatBand.position.y = 3.15;
             snowmanGroup.add(hatBand);
 
-            // 围巾
             const scarfMat = new THREE.MeshBasicMaterial({ color: 0xcc0000 });
             const scarf = new THREE.Mesh(
                 new THREE.TorusGeometry(0.52, 0.08, 8, 20),
@@ -1448,7 +1817,6 @@
             scarf.rotation.x = Math.PI / 2;
             snowmanGroup.add(scarf);
 
-            // 围巾尾巴
             const scarfTail = new THREE.Mesh(
                 new THREE.BoxGeometry(0.15, 0.5, 0.05),
                 scarfMat
@@ -1457,14 +1825,12 @@
             scarfTail.rotation.z = -0.3;
             snowmanGroup.add(scarfTail);
 
-            // 纽扣
             [1.5, 1.75, 2.0].forEach(y => {
                 const button = new THREE.Mesh(new THREE.SphereGeometry(0.06, 8, 8), blackMat);
                 button.position.set(0, y, 0.55);
                 snowmanGroup.add(button);
             });
 
-            // 树枝手臂
             const armMat = new THREE.MeshBasicMaterial({ color: 0x4a3728 });
             [-1, 1].forEach(side => {
                 const arm = new THREE.Mesh(
@@ -1475,7 +1841,6 @@
                 arm.rotation.z = side * 0.8;
                 snowmanGroup.add(arm);
 
-                // 手指
                 for (let i = 0; i < 2; i++) {
                     const finger = new THREE.Mesh(
                         new THREE.CylinderGeometry(0.015, 0.01, 0.15, 4),
@@ -1549,11 +1914,9 @@
             const sledMat = new THREE.MeshPhongMaterial({ color: 0x8b0000, shininess: 30 });
             const goldMat = new THREE.MeshBasicMaterial({ color: 0xffd700 });
 
-            // 雪橇底座
             const base = new THREE.Mesh(new THREE.BoxGeometry(2.5, 0.15, 1), sledMat);
             sleigh.add(base);
 
-            // 雪橇滑板
             [-0.4, 0.4].forEach(z => {
                 const runner = new THREE.Mesh(
                     new THREE.BoxGeometry(3, 0.08, 0.08),
@@ -1563,12 +1926,10 @@
                 sleigh.add(runner);
             });
 
-            // 雪橇背部
             const back = new THREE.Mesh(new THREE.BoxGeometry(0.15, 1, 1), sledMat);
             back.position.set(-1.1, 0.5, 0);
             sleigh.add(back);
 
-            // 圣诞老人
             const santaBody = new THREE.Mesh(
                 new THREE.SphereGeometry(0.4, 12, 12),
                 new THREE.MeshPhongMaterial({ color: 0xff0000 })
@@ -1583,7 +1944,6 @@
             santaHead.position.set(-0.4, 0.95, 0);
             sleigh.add(santaHead);
 
-            // 圣诞帽
             const hat = new THREE.Mesh(
                 new THREE.ConeGeometry(0.18, 0.35, 12),
                 new THREE.MeshPhongMaterial({ color: 0xff0000 })
@@ -1599,7 +1959,6 @@
             hatBall.position.set(-0.32, 1.4, 0);
             sleigh.add(hatBall);
 
-            // 礼物袋
             const bag = new THREE.Mesh(
                 new THREE.SphereGeometry(0.5, 12, 12),
                 new THREE.MeshPhongMaterial({ color: 0x8b4513 })
@@ -1608,7 +1967,6 @@
             bag.scale.set(1, 1.3, 1);
             sleigh.add(bag);
 
-            // 驯鹿
             const reindeerBody = new THREE.Mesh(
                 new THREE.SphereGeometry(0.3, 12, 12),
                 new THREE.MeshPhongMaterial({ color: 0x8b4513 })
@@ -1617,7 +1975,6 @@
             reindeerBody.scale.set(1.8, 1, 1);
             sleigh.add(reindeerBody);
 
-            // 驯鹿头
             const reindeerHead = new THREE.Mesh(
                 new THREE.SphereGeometry(0.15, 10, 10),
                 new THREE.MeshPhongMaterial({ color: 0x8b4513 })
@@ -1625,7 +1982,6 @@
             reindeerHead.position.set(2.8, 0.2, 0);
             sleigh.add(reindeerHead);
 
-            // 鹿角
             const antlerMat = new THREE.MeshBasicMaterial({ color: 0x4a3728 });
             [-0.12, 0.12].forEach(z => {
                 const antler = new THREE.Mesh(
@@ -1637,7 +1993,6 @@
                 sleigh.add(antler);
             });
 
-            // 红鼻子
             const nose = new THREE.Mesh(
                 new THREE.SphereGeometry(0.05, 8, 8),
                 new THREE.MeshBasicMaterial({ color: 0xff0000 })
@@ -1645,7 +2000,6 @@
             nose.position.set(2.95, 0.18, 0);
             sleigh.add(nose);
 
-            // 缰绳
             const rope = new THREE.Mesh(
                 new THREE.CylinderGeometry(0.02, 0.02, 1.5, 6),
                 new THREE.MeshBasicMaterial({ color: 0x4a3728 })
@@ -1678,10 +2032,13 @@
             ];
         }
 
-        // 加载照片
+        // 加载照片 - 增强版，确保照片能正确显示
         function loadPhotos() {
             const textureLoader = new THREE.TextureLoader();
             const positions = getPhotoPositions();
+            
+            // 添加跨域支持
+            textureLoader.crossOrigin = 'anonymous';
             
             PHOTOS.forEach((photoPath, index) => {
                 if (index >= positions.length) return;
@@ -1694,22 +2051,84 @@
                 const frameThickness = 0.1;
                 
                 // 白色相框
+                const frameMaterial = new THREE.MeshLambertMaterial({ color: 0xffffff });
                 const frame = new THREE.Mesh(
                     new THREE.BoxGeometry(photoWidth + frameThickness * 2, photoHeight + frameThickness * 2, 0.08),
-                    new THREE.MeshLambertMaterial({ color: 0xffffff })
+                    frameMaterial
                 );
                 frame.userData = { photoPath, isPhoto: true };
                 photoGroup.add(frame);
 
-                textureLoader.load(photoPath, (texture) => {
-                    const photo = new THREE.Mesh(
-                        new THREE.PlaneGeometry(photoWidth, photoHeight),
-                        new THREE.MeshBasicMaterial({ map: texture, side: THREE.FrontSide })
-                    );
-                    photo.position.z = 0.05;
-                    photo.userData = { photoPath, isPhoto: true };
-                    photoGroup.add(photo);
-                });
+                // 照片背景（黑色，防止没有加载时透明）
+                const photoBg = new THREE.Mesh(
+                    new THREE.PlaneGeometry(photoWidth, photoHeight),
+                    new THREE.MeshBasicMaterial({ color: 0x333333 })
+                );
+                photoBg.position.z = 0.041;
+                photoGroup.add(photoBg);
+
+                // 加载照片纹理
+                textureLoader.load(
+                    photoPath,
+                    (texture) => {
+                        // 成功加载
+                        texture.encoding = THREE.sRGBEncoding;
+                        
+                        const photo = new THREE.Mesh(
+                            new THREE.PlaneGeometry(photoWidth, photoHeight),
+                            new THREE.MeshBasicMaterial({ 
+                                map: texture, 
+                                side: THREE.FrontSide,
+                                transparent: false
+                            })
+                        );
+                        photo.position.z = 0.05;
+                        photo.userData = { photoPath, isPhoto: true };
+                        photoGroup.add(photo);
+                        
+                        console.log(`✓ 照片加载成功: ${photoPath}`);
+                    },
+                    (progress) => {
+                        // 加载进度
+                    },
+                    (error) => {
+                        // 加载失败 - 显示占位符
+                        console.warn(`✗ 照片加载失败: ${photoPath}`, error);
+                        
+                        // 创建占位符
+                        const canvas = document.createElement('canvas');
+                        canvas.width = 256;
+                        canvas.height = 256;
+                        const ctx = canvas.getContext('2d');
+                        
+                        // 渐变背景
+                        const gradient = ctx.createLinearGradient(0, 0, 256, 256);
+                        gradient.addColorStop(0, '#ff6b6b');
+                        gradient.addColorStop(1, '#ffd700');
+                        ctx.fillStyle = gradient;
+                        ctx.fillRect(0, 0, 256, 256);
+                        
+                        // 图标
+                        ctx.fillStyle = 'rgba(255,255,255,0.8)';
+                        ctx.font = '80px Arial';
+                        ctx.textAlign = 'center';
+                        ctx.textBaseline = 'middle';
+                        ctx.fillText('📷', 128, 100);
+                        
+                        // 文字
+                        ctx.font = 'bold 24px Arial';
+                        ctx.fillText(`Photo ${index + 1}`, 128, 180);
+                        
+                        const placeholderTexture = new THREE.CanvasTexture(canvas);
+                        const placeholder = new THREE.Mesh(
+                            new THREE.PlaneGeometry(photoWidth, photoHeight),
+                            new THREE.MeshBasicMaterial({ map: placeholderTexture })
+                        );
+                        placeholder.position.z = 0.05;
+                        placeholder.userData = { photoPath, isPhoto: true };
+                        photoGroup.add(placeholder);
+                    }
+                );
 
                 // 金色挂钩
                 const hook = new THREE.Mesh(
@@ -1839,12 +2258,19 @@
             document.getElementById('ambientBtn').classList.toggle('active');
         }
 
+        function toggleGlowBand() {
+            isGlowBandEnabled = !isGlowBandEnabled;
+            glowBands.forEach(band => {
+                band.visible = isGlowBandEnabled;
+            });
+            document.getElementById('glowBandBtn').classList.toggle('active');
+        }
+
         function setTheme(themeName) {
             currentTheme = themeName;
             document.querySelectorAll('.theme-btn').forEach(btn => btn.classList.remove('active'));
             document.querySelector(`.theme-${themeName}`).classList.add('active');
             
-            // 根据主题调整氛围灯颜色
             const ambientLights = document.querySelectorAll('.ambient-light');
             const themes = {
                 classic: ['rgba(255, 100, 100, 0.6)', 'rgba(100, 255, 150, 0.5)', 'rgba(255, 215, 0, 0.5)'],
@@ -1922,6 +2348,19 @@
             
             raycaster.setFromCamera(mouse, camera);
             
+            // 检测猫猫点击
+            if (cat) {
+                const catObjects = [];
+                cat.traverse(child => { if (child.isMesh) catObjects.push(child); });
+                const catIntersects = raycaster.intersectObjects(catObjects);
+                
+                if (catIntersects.length > 0) {
+                    triggerCatAnimation();
+                    return;
+                }
+            }
+            
+            // 检测照片点击
             const allObjects = [];
             photoFrames.forEach(frame => frame.traverse(child => { if (child.isMesh) allObjects.push(child); }));
             
@@ -1975,10 +2414,55 @@
                 layer.geometry.attributes.position.needsUpdate = true;
             });
             
+            // 光带动画
+            if (isGlowBandEnabled) {
+                glowBands.forEach((band, bandIndex) => {
+                    band.children.forEach(child => {
+                        if (child.userData.type === 'lightStream') {
+                            // 光柱流动效果
+                            const positions = child.geometry.attributes.position.array;
+                            const original = child.userData.originalPositions;
+                            
+                            for (let i = 0; i < positions.length; i += 3) {
+                                const idx = i / 3;
+                                const flowOffset = (time * 2 + idx * 0.1) % (Math.PI * 2);
+                                const brightness = Math.sin(flowOffset);
+                                
+                                // 位置微调
+                                positions[i] = original[i] + Math.sin(time + idx * 0.2) * 0.05;
+                                positions[i + 2] = original[i + 2] + Math.cos(time + idx * 0.2) * 0.05;
+                            }
+                            child.geometry.attributes.position.needsUpdate = true;
+                            child.material.opacity = 0.2 + Math.sin(time * 2 + bandIndex) * 0.15;
+                        } else if (child.userData.isGlow) {
+                            // 外层光晕脉冲
+                            child.material.opacity = 0.1 + Math.sin(time * 1.5 + bandIndex * 0.5) * 0.08;
+                        } else if (child.userData.originalPositions) {
+                            // 主光带粒子动画
+                            const positions = child.geometry.attributes.position.array;
+                            const original = child.userData.originalPositions;
+                            
+                            for (let i = 0; i < positions.length; i += 3) {
+                                const idx = i / 3;
+                                const waveOffset = time * 2 + idx * 0.05;
+                                
+                                positions[i] = original[i] + Math.sin(waveOffset) * 0.08;
+                                positions[i + 1] = original[i + 1] + Math.sin(waveOffset * 0.7) * 0.05;
+                                positions[i + 2] = original[i + 2] + Math.cos(waveOffset) * 0.08;
+                            }
+                            child.geometry.attributes.position.needsUpdate = true;
+                            
+                            // 脉冲透明度
+                            const baseOpacity = child.userData.colorData?.opacity || 0.4;
+                            child.material.opacity = baseOpacity + Math.sin(time * 1.5 + bandIndex * 0.3) * 0.15;
+                        }
+                    });
+                });
+            }
+            
             // 香奈儿logo旋转和发光
             if (chanelLogo) {
                 chanelLogo.rotation.y = Math.sin(time * 0.5) * 0.2;
-                // 脉冲发光效果
                 const glowIntensity = 0.15 + Math.sin(time * 2) * 0.1;
                 chanelLogo.children.forEach(child => {
                     if (child.material && child.material.opacity !== undefined && child.geometry.type === 'SphereGeometry') {
@@ -1989,17 +2473,8 @@
                 });
             }
             
-            // 猫猫动画 - 轻微摇晃和眨眼
-            if (cat) {
-                // 轻微左右摇晃
-                cat.rotation.z = Math.sin(time * 1.5) * 0.03;
-                // 尾巴摇动
-                cat.children.forEach(child => {
-                    if (child.type === 'Group' && child.children.length === 8) {
-                        child.rotation.x = Math.sin(time * 3) * 0.1;
-                    }
-                });
-            }
+            // 猫猫动画
+            updateCatAnimation(time);
             
             // 极光动画
             if (auroraParticles && isAuroraEnabled) {
