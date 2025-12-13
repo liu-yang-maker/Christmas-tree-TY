@@ -1021,69 +1021,71 @@
             }
         }
 
-        // 绘制香奈儿双C logo - 正确版本
-        function drawChanelLogo() {
-            ctx.clearRect(0, 0, 512, 512);
-            
-            const centerX = 256;
-            const centerY = 256;
-            const radius = 110;
-            const offset = 50; // 两个C圆心的水平偏移
-            const lineWidth = 28;
-            
-            // C的开口角度（值越小开口越小）
-            const gapAngle = Math.PI * 0.35;
-            
-            ctx.lineCap = 'round';
-            ctx.lineWidth = lineWidth;
-            ctx.shadowColor = '#ffd700';
-            ctx.shadowBlur = 25;
-            ctx.strokeStyle = '#ffd700';
-            
-            // 左边的C（开口朝右）
-            // 画一个缺少右边部分的圆弧
-            ctx.beginPath();
-            ctx.arc(centerX - offset, centerY, radius,
-                    gapAngle,           // 从右上开始
-                    -gapAngle,          // 到右下结束
-                    true);              // 逆时针（这样会画左边的大弧）
-            ctx.stroke();
-            
-            // 右边的C（开口朝左）
-            // 画一个缺少左边部分的圆弧
-            ctx.beginPath();
-            ctx.arc(centerX + offset, centerY, radius,
-                    Math.PI - gapAngle,  // 从左上开始
-                    Math.PI + gapAngle,  // 到左下结束
-                    true);               // 逆时针（这样会画右边的大弧）
-            ctx.stroke();
-            
-            // 内层亮色增加质感
-            ctx.shadowBlur = 10;
-            ctx.strokeStyle = '#ffec8b';
-            ctx.lineWidth = lineWidth * 0.5;
-            
-            ctx.beginPath();
-            ctx.arc(centerX - offset, centerY, radius, gapAngle, -gapAngle, true);
-            ctx.stroke();
-            
-            ctx.beginPath();
-            ctx.arc(centerX + offset, centerY, radius, Math.PI - gapAngle, Math.PI + gapAngle, true);
-            ctx.stroke();
-            
-            // 中心白色高光点缀
-            ctx.shadowBlur = 0;
-            ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
-            ctx.lineWidth = 4;
-            
-            ctx.beginPath();
-            ctx.arc(centerX - offset, centerY, radius, Math.PI * 0.6, Math.PI * 1.1, false);
-            ctx.stroke();
-            
-            ctx.beginPath();
-            ctx.arc(centerX + offset, centerY, radius, -Math.PI * 0.1, Math.PI * 0.4, false);
-            ctx.stroke();
-        }
+        // 创建香奈儿Logo - 修正版双C标志
+        function createChanelLogo() {
+            chanelLogo = new THREE.Group();
+
+            // 创建Canvas绘制双C logo
+            const canvas = document.createElement('canvas');
+            canvas.width = 512;
+            canvas.height = 512;
+            const ctx = canvas.getContext('2d');
+
+            // ========== 香奈儿双C logo ==========
+            function drawChanelLogo() {
+                ctx.clearRect(0, 0, 512, 512);
+                
+                const centerX = 256;
+                const centerY = 256;
+                const radius = 85;
+                const offset = 48; // 圆心偏移量（这个值决定交叠程度）
+                const lineWidth = 22;
+                const gapAngle = 70 * Math.PI / 180; // 开口角度70度
+                
+                ctx.lineCap = 'round';
+                ctx.lineWidth = lineWidth;
+                ctx.shadowColor = '#ffd700';
+                ctx.shadowBlur = 20;
+                ctx.strokeStyle = '#ffd700';
+                
+                // 左边的C - 圆心偏左，开口朝左
+                ctx.beginPath();
+                ctx.arc(
+                    centerX - offset,
+                    centerY,
+                    radius,
+                    gapAngle,
+                    2 * Math.PI - gapAngle,
+                    true  // 改成true
+                );
+                ctx.stroke();
+                
+                // 右边的C - 圆心偏右，开口朝右
+                ctx.beginPath();
+                ctx.arc(
+                    centerX + offset,
+                    centerY,
+                    radius,
+                    Math.PI - gapAngle,
+                    Math.PI + gapAngle,
+                    false  // 改成false
+                );
+                ctx.stroke();
+                
+                // 内层高亮
+                ctx.shadowBlur = 6;
+                ctx.strokeStyle = '#ffec8b';
+                ctx.lineWidth = lineWidth * 0.35;
+                
+                ctx.beginPath();
+                ctx.arc(centerX - offset, centerY, radius, gapAngle, 2 * Math.PI - gapAngle, true);
+                ctx.stroke();
+                
+                ctx.beginPath();
+                ctx.arc(centerX + offset, centerY, radius, Math.PI - gapAngle, Math.PI + gapAngle, false);
+                ctx.stroke();
+            }
+            // ========== 结束 ==========
 
             drawChanelLogo();
 
